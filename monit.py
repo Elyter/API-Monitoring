@@ -7,6 +7,7 @@ import datetime
 import socket
 import logging
 from logging.handlers import RotatingFileHandler
+import requests
 
 # Configurations
 LOG_DIR = "/var/monit"
@@ -32,7 +33,7 @@ def load_config():
     if not os.path.exists(CONFIG_FILE_PATH):
         os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
         with open(CONFIG_FILE_PATH, "w") as config_file:
-            json.dump({"ports": []}, config_file, indent=2)
+            json.dump({"ports": [],"alert_thresholds": {"cpu": 90,"ram": 20,"disk": 95},"discord_webhook_url": "YOUR_DISCORD_WEBHOOK_URL"}, config_file, indent=2)
 
     with open(CONFIG_FILE_PATH, "r") as config_file:
         return json.load(config_file)
@@ -44,8 +45,19 @@ def check_resources():
     disk_percent = psutil.disk_usage("/").percent
 
     config = load_config()
+    ports_to_monitor = config.get("ports", [])
+    alert_thresholds = config.get("alert_thresholds", {})
+
+    # Check CPU, RAM, Disk
+    alert_values = {}
+    for resource, threshold in alert_thresholds.items():
+        value = locals()[f"{resource}_percent"]
+        if value > threshold:
+            alert_values[resource] = value
+
+    # Check Ports
     ports_status = {}
-    for port in config.get("ports", []):
+    for port in ports_to_monitor:
         ports_status[port] = is_port_open("127.0.0.1", port)
 
     report = {
@@ -61,8 +73,27 @@ def check_resources():
     with open(report_file, "w") as report_file:
         json.dump(report, report_file, indent=2)
 
+    if alert_values:
+        send_alert(alert_values)
+
     logging.info("Check completed and report generated.")
     return report
+
+def send_alert(alert_values):
+    config = load_config()
+    discord_webhook_url = config.get("discord_webhook_url")
+
+    if discord_webhook_url:
+        alert_message = "Alert! The following thresholds have been exceeded:\n"
+        for resource, value in alert_values.items():
+            alert_message += f"{resource}: {value}%\n"
+
+        payload = {"content": alert_message}
+        requests.post(discord_webhook_url, json=payload)
+        logging.info("Alert sent to Discord.")
+    else:
+        logging.warning("Discord webhook URL not configured. Unable to send alerts.")
+
 
 
 def list_reports():
