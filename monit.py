@@ -30,15 +30,12 @@ def setup_logging():
 
 def load_config():
     if not os.path.exists(CONFIG_FILE_PATH):
-        return {}
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+        with open(CONFIG_FILE_PATH, "w") as config_file:
+            json.dump({"ports": []}, config_file, indent=2)
 
     with open(CONFIG_FILE_PATH, "r") as config_file:
         return json.load(config_file)
-
-
-def save_config(config):
-    with open(CONFIG_FILE_PATH, "w") as config_file:
-        json.dump(config, config_file, indent=2)
 
 
 def check_resources():
@@ -71,7 +68,6 @@ def check_resources():
 def list_reports():
     reports = [f for f in os.listdir(REPORTS_DIR) if f.startswith("report_")]
     logging.info("List of available reports: %s", reports)
-    print(reports)
     return reports
 
 
@@ -91,7 +87,9 @@ def get_last_report():
 
 def get_average_report(last_x_hours):
     reports = list_reports()
-    recent_reports = sorted(reports, reverse=True)[:last_x_hours]
+    recent_reports = [
+        report_id for report_id in reports if is_within_last_x_hours(report_id, last_x_hours)
+    ]
 
     if recent_reports:
         average_report = {"cpu_percent": 0, "ram_percent": 0, "disk_percent": 0}
@@ -113,8 +111,19 @@ def get_average_report(last_x_hours):
         logging.info("Calculated the average report for the last %d hours.", last_x_hours)
         return average_report
     else:
-        logging.warning("No reports available.")
+        logging.warning("No reports available in the specified time range.")
         return None
+
+def is_within_last_x_hours(report_id, last_x_hours):
+    report_file = os.path.join(REPORTS_DIR, report_id)
+    with open(report_file, "r") as report_file:
+        report_data = json.load(report_file)
+
+    report_time = datetime.datetime.strptime(report_data["timestamp"], "%Y-%m-%d %H:%M:%S")
+    time_difference = datetime.datetime.now() - report_time
+
+    return time_difference.total_seconds() / 3600 <= last_x_hours
+
 
 
 def is_port_open(host, port):
@@ -133,17 +142,38 @@ if __name__ == "__main__":
 
     # Commands
     if "check" in os.sys.argv:
-        check_resources()
+        report = check_resources()
+        print("Report generated:\n")
+        print(f"id : {report["id"]}")
+        print(f"timestamp : {report["timestamp"]}")
+        print(f"cpu_percent : {str(report["cpu_percent"])}%")
+        print(f"ram_percent : {str(report["ram_percent"])}%")
+        print(f"disk_percent : {str(report["disk_percent"])}%")
+        print(f"ports_status : {str(report["ports_status"])}")
 
     elif "list" in os.sys.argv:
-        list_reports()
+        listReports = list_reports()
+        print("Lists of available reports:\n")
+        for report in listReports:
+            print(report)
 
     elif "get" in os.sys.argv and "last" in os.sys.argv:
-        get_last_report()
+        report = get_last_report()
+        print("Last report: \n")
+        print(f"id : {report["id"]}")
+        print(f"timestamp : {report["timestamp"]}")
+        print(f"cpu_percent : {str(report["cpu_percent"])}%")
+        print(f"ram_percent : {str(report["ram_percent"])}%")
+        print(f"disk_percent : {str(report["disk_percent"])}%")
+        print(f"ports_status : {str(report["ports_status"])}")
 
     elif "get" in os.sys.argv and "avg" in os.sys.argv and len(os.sys.argv) == 4:
         last_x_hours = int(os.sys.argv[3])
-        get_average_report(last_x_hours)
+        report = get_average_report(last_x_hours)
+        print(f"Average report for the last {last_x_hours} hours: \n")
+        print(f"cpu_percent : {str(report["cpu_percent"])}%")
+        print(f"ram_percent : {str(report["ram_percent"])}%")
+        print(f"disk_percent : {str(report["disk_percent"])}%")
 
     else:
         print("Usage: python monit.py [check | list | get last | get avg X]")
