@@ -194,7 +194,6 @@ parser.add_argument('last_x_hours', type=int, help='Nombre d\'heures pour le cal
 class CheckResources(Resource):
     def get(self):
         report = check_resources()
-        print(report)
         return jsonify(report)
 
 @namespace.route('/reports')
@@ -228,4 +227,4 @@ if __name__ == "__main__":
         os.makedirs(REPORTS_DIR)
 
     # Exécution de l'application Flask
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=3000)
