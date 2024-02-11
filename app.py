@@ -13,7 +13,7 @@ import requests
 from pymongo import MongoClient  # Importez MongoClient
 from bson import json_util
 import hashlib
-
+from monit import check_resources
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["monit_db"]
@@ -27,7 +27,6 @@ def save_report(report):
 # Configurations
 LOG_DIR = "/var/monit"
 CONFIG_FILE_PATH = "/etc/monit/monit_config.json"
-REPORTS_DIR = "/var/monit/reports"
 
 def setup_logging():
     log_file = os.path.join(LOG_DIR, "monit.log")
@@ -60,53 +59,6 @@ def get_report(report_id):
     else:
         return {"error": "Report not found"}, 404
 
-def check_resources():
-    cpu_percent = psutil.cpu_percent()
-    ram_percent = psutil.virtual_memory().percent
-    disk_percent = psutil.disk_usage("/").percent
-
-    config = load_config()
-    ports_to_monitor = config.get("ports", [])
-    alert_thresholds = config.get("alert_thresholds", {})
-
-    # Check CPU, RAM, Disk
-    alert_values = {}
-    for resource, threshold in alert_thresholds.items():
-        value = locals()[f"{resource}_percent"]
-        if value > threshold:
-            alert_values[resource] = value
-
-    # Check Ports
-    ports_status = {}
-    for port in ports_to_monitor:
-        ports_status[port] = is_port_open("127.0.0.1", port)
-        
-    date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    report = {
-        "timestamp": date,
-        "id": hashlib.sha256(date.encode()).hexdigest(),
-        "cpu_percent": cpu_percent,
-        "ram_percent": ram_percent,
-        "disk_percent": disk_percent,
-        "ports_status": ports_status,
-    }
-    
-    save_report(report)
-
-    result = {
-        "timestamp": date,
-        "id": hashlib.sha256(date.encode()).hexdigest(),
-        "cpu_percent": cpu_percent,
-        "ram_percent": ram_percent,
-        "disk_percent": disk_percent,
-        "ports_status": ports_status,
-    }
-    if alert_values:
-        send_alert(alert_values)
-
-    logging.info("Check completed and report generated.")
-    return result
-
 def send_alert(alert_values):
     config = load_config()
     discord_webhook_url = config.get("discord_webhook_url")
@@ -121,13 +73,6 @@ def send_alert(alert_values):
         logging.info("Alert sent to Discord.")
     else:
         logging.warning("Discord webhook URL not configured. Unable to send alerts.")
-
-def list_reports():
-    # Récupérez tous les rapports depuis la collection "reports"
-    reports_collection = db["reports"]
-    reports = list(reports_collection.find({}, {"_id": False}))
-    return reports
-
 
 def get_last_report():
     reports_collection = db["reports"]
@@ -190,41 +135,10 @@ parser = reqparse.RequestParser()
 parser.add_argument('last_x_hours', type=int, help='Nombre d\'heures pour le calcul de la moyenne')
 
 # Classe de ressource pour la vérification des ressources
-@namespace.route('/check')
-class CheckResources(Resource):
-    def get(self):
-        report = check_resources()
-        return jsonify(report)
 
-@namespace.route('/reports')
-class ListReports(Resource):
-    def get(self):
-        reports = list_reports()
-        return jsonify(reports)
-
-@namespace.route('/report/last')
-class GetLastReport(Resource):
-    def get(self):
-        report = get_last_report()
-        return jsonify(report)
-
-@namespace.route('/average_report/<int:last_x_hours>')
-class GetAverageReport(Resource):
-    def get(self, last_x_hours):
-        report = get_average_report(last_x_hours)
-        return jsonify(report)
-
-@namespace.route('/report/<string:id>')
-class GetReport(Resource):
-    def get(self, id):
-        report = get_report(id)
-        return jsonify(report)
 
 if __name__ == "__main__":
     setup_logging()
-
-    if not os.path.exists(REPORTS_DIR):
-        os.makedirs(REPORTS_DIR)
 
     # Exécution de l'application Flask
     app.run(debug=True, port=3000)
