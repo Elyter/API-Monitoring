@@ -4,17 +4,13 @@ Ce projet est une application de monitoring équipée d'une API en Python permet
 ## Instructions de démarrage
 1. Cloner le dépôt :
 ```bash
-git clone https://github.com/votre_utilisateur/votre_projet.gi
+git clone https://github.com/votre_utilisateur/votre_projet.git
 ```
-2. Naviguer vers le répertoire de l'API :
-```bash
-cd api
-```
-3. Lancer les conteneurs Docker :
+2. Lancer les conteneurs Docker :
 ```bash
 docker-compose up
 ```
-4. Démarrer l'API :
+3. Démarrer l'API :
 ```bash
 python3 main.py
 ```
